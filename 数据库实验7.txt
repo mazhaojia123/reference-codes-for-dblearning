@@ -1,0 +1,105 @@
+create table test7_01 as
+select sid, name, birthday
+from pub.student
+
+//在一个奇怪的地方建立索引……
+create index name_index on test7_01(substr(name, 1, 1))
+
+select * from 
+(select sid,name,birthday,
+(select count(*) from test7_01 where substr(name,1,1)=substr(t1.name,1,1)) samefirstname 
+from pub.student_testindex t1)
+where samefirstname=7
+
+
+
+create table test7_02 as
+select sid, name, birthday
+from pub.student
+
+Update test7_02 
+set birthday=to_date('19881018','yyyymmdd') 
+where substr(sid,12,1)='0'
+
+//建立生日索引
+create index birthday_index on test7_02(birthday)
+
+select * from
+(select sid,name,birthday,
+ (select count(*) from test7_02 where name=t1.name and birthday=t1.birthday) samenamebirthday,
+(select count(*) from test7_02 where birthday=t1.birthday) samebirthday
+ from pub.student_testindex t1)
+where samebirthday=403
+
+//思考题。不能使用索引，但是可以增建一个name_index 
+select * from 
+(select sid,name,birthday,
+(select count(*) from test7_02 where name=t1.name) samename 
+from pub.student t1)
+where samename=7
+
+
+
+select * from
+(select sid,name,birthday,
+(select count(*) from pub.student
+where name like 'substr(t1.name, 1, 1)%'
+) samefirstname 
+from pub.student_testindex t1) where samefirstname=7
+
+//修改为
+create or replace view test7_03 as
+select * from
+(select sid,name,birthday,
+(select count(*) from pub.student
+where name like CONCAT(substr(t1.name, 1, 1), '%')
+) samefirstname 
+from pub.student_testindex t1) where samefirstname=7
+
+
+
+select * 
+from 
+    (select sid,name,birthday,
+        (select count(*) 
+        from pub.student 
+        where to_char(birthday,'yyyymm')=to_char(t1.birthday,'yyyymm')) sameyearmonth,
+        (select count(*) 
+        from pub.student 
+        where extract (year from birthday) =extract (year from t1.birthday)
+        ) sameyear
+    from pub.student_testindex t1) 
+where sameyearmonth=35
+
+//oracle tranc()函数 改为
+//如何查询当前月的最后一天，如何查询当前年的最后一天->转换为查询下一年，下一月的第一天
+create or replace view test7_04 as
+select * from 
+(select sid,name,birthday,
+(select count(*) from pub.student 
+where birthday >= trunc(t1.birthday, 'mm') and birthday < trunc(add_months(t1.birthday, 1), 'mm')
+) sameyearmonth,
+(select count(*) from pub.student 
+where birthday >= trunc(t1.birthday, 'yyyy') and birthday < trunc(add_months(t1.birthday, 12), 'yyyy')
+) sameyear
+ from pub.student_testindex t1) where sameyearmonth=35
+
+
+
+
+select * from 
+(select sid,name,birthday,
+(select count(*) from pub.student 
+where birthday-1=t1.birthday
+) nextbirthday
+from pub.student_testindex t1) where nextbirthday=7
+
+//改为
+create or replace view test7_05 as
+select * from 
+(select sid,name,birthday,
+(select count(*) from pub.student 
+where birthday=t1.birthday + 1
+) nextbirthday
+from pub.student_testindex t1) where nextbirthday=7
+

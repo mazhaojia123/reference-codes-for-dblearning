@@ -1,0 +1,96 @@
+create table test3_01 as
+    (select *
+    from pub.student_31
+    where regexp_like(sid, '^[0-9]+$'))
+
+create table test3_02 as
+    (select *
+    from pub.student_31
+    where extract(year from birthday) + age = 2012)
+
+create table test3_03 as
+    (select *
+    from pub.student_31
+    where (sex = '男') or (sex = '女') or sex is null)
+
+create table test3_04 as
+    (select *
+    from pub.student_31
+    where dname is not null and length(dname) >=3 and not dname like '% %')
+
+create table test3_05 as
+    (select *
+    from pub.student_31
+    where not class like '% %' and not class like '%级%' )
+
+create table test3_06 as
+    (select *
+    from pub.student_31
+    where not
+        (not regexp_like(sid, '^[0-9]+$')
+        or extract(year from birthday) + age <> 2012
+        or (name like '% %' or length(name) < 2)
+        or not ((sex = '男') or (sex = '女') or sex is null)
+        or (not (dname is not null and length(dname) >=3 and not dname like '% %'))
+        or (class like '% %' or class like '%级%')))
+
+create table test3_07 as
+    (select *
+    from pub.student_course_32
+    where sid in
+        (select sid
+        from pub.student))
+
+create table test3_08 as
+    (select *
+    from pub.student_course_32
+    where (cid, tid) in
+        (select *
+        from pub.teacher_course))
+
+create table test3_09 as
+    (select *
+    from pub.student_course_32
+    where not (score > 100 or score <0))
+
+create table test3_10 as
+    (select *
+    from pub.student_course_32
+    where 
+        (sid in
+            (select sid from pub.student)
+        and cid in 
+            (select cid from pub.course)
+        and tid in
+            (select tid from pub.teacher)
+        and (cid, tid) in 
+            (select * from pub.teacher_course)
+        and not (score > 100 or score <0)))
+
+***************************************************************************************
+create table test4_01 as
+    (select *
+    from pub.student_41)
+
+alter table test4_01 add sum_score numeric(22, 5)
+
+update test4_01 T
+set sum_score = 
+    (select sum(score)
+    from test4_01 natural join pub.student_course
+    where sid = T.sid 
+    group by sid)
+
+-----------------------------------------------------
+create table test4_02 as
+    (select *
+    from pub.student_41)
+
+alter table test4_02 add avg_score numeric(22, 2)
+
+update test4_02 T
+set avg_score = 
+    (select round(avg(score), 1)
+    from test4_02 natural join pub.student_course
+    where sid = T.sid 
+    group by sid)

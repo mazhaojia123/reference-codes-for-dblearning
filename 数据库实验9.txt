@@ -1,0 +1,68 @@
+create table test9_01 as
+select *
+from pub.student_11_1
+where 1 = 0
+
+create index sid_index on test9_01(sid)
+
+insert into test9_01
+select *
+from pub.student
+where sex = 'Ů'
+
+insert into test9_01
+select *
+from pub.student_11_1
+where sex = 'Ů' and sid not in
+     (select sid
+     from test9_01)
+
+insert into test9_01
+select *
+from pub.student_11_2
+where sex = 'Ů' and sid not in
+     (select sid
+     from test9_01)
+
+
+
+
+create table test9_02 as
+select *
+from pub.student_11_1
+where 1 = 0
+
+create index sid_index9_02 on test9_02(sid)
+
+insert into test9_02
+select *
+from pub.student
+where sex = 'Ů' and
+    sid in 
+        (select sid
+        from pub.student_course
+        where score < 60)
+
+insert into test9_02
+select *
+from pub.student_11_1
+where sex = 'Ů' and
+    sid in 
+        (select sid
+        from pub.student_course
+        where score < 60) and
+    sid not in
+        (select sid
+        from test9_02)
+
+insert into test9_02
+select *
+from pub.student_11_2
+where sex = 'Ů' and
+    sid in 
+        (select sid
+        from pub.student_course
+        where score < 60) and 
+    sid not in
+        (select sid
+        from test9_02)

@@ -1,0 +1,211 @@
+1)注意substr的使用方法
+create table test5_01
+    (First_name varchar(4), 
+    frequency numeric(4))
+
+insert into test5_01
+select substr(name, 2), count(*)
+from pub.student
+group by substr(name, 2)
+
+2) 先将第一个插进去，再插进去第一个没有第二个有的，再补充交集部分
+create table test5_02
+    (letter varchar(2), 
+    frequency numeric(4))
+
+create or replace view test5_02_1 as
+((select substr(name, 2, 1) letter, count(*) count
+from pub.student
+where substr(name, 2, 1) is not null 
+group by substr(name, 2, 1))
+union all
+(select substr(name, 3, 1) letter, count(*) count
+from pub.student
+where substr(name, 3, 1) is not null
+group by substr(name, 3, 1)))
+
+insert into table test5_02
+select letter, sum(count)
+from test5_02_1
+group by letter
+
+
+
+3)
+create table test5_03
+    (dname varchar(30), 
+    class varchar(10), 
+    p_count1 int,
+    p_count2 int,
+    p_count int)
+
+//test5_03_0 是dname不为空的全部的学生选课记录 和 未选课的学生
+create or replace view test5_03_0 as
+select sid, dname, class, cid, score, credit
+from (pub.student left outer join pub.student_course using(sid)) left outer join pub.course using(cid)
+where dname is not null
+
+//排除刷课, 获取有效学分
+create or replace view test5_03_1 as
+select sid, dname, class, cid, max(score) score, max(credit) credit
+from test5_03_0
+group by sid, dname, class, cid
+
+//如果不排除刷课的情况呢？
+{
+create or replace view test5_03_22 as
+select sid, dname, class, sum(credit) sum_credit
+from test5_03_0
+where score >= 60
+group by sid, dname, class
+}
+
+//获取每个人的总学分
+create or replace view test5_03_2 as
+select sid, dname, class, sum(credit) sum_credit
+from test5_03_1
+where score >= 60 //////////////此处造成了数据的丢失！！！！！！！！！！！！！！！！！！！
+group by sid, dname, class
+
+//计算每个专业每个班下的达标与不达标人数
+insert into test5_03
+select dname, class, 
+    (select count(*)
+    from test5_03_2
+    where T.dname = dname and T.class = class and sum_credit >= 10), 
+    ((select count(*)
+    from pub.student
+    where T.dname = dname and T.class = class)
+    -
+    (select count(*)
+    from test5_03_2
+    where T.dname = dname and T.class = class and sum_credit >= 10)), 
+    (select count(*)
+    from pub.student
+    where T.dname = dname and T.class = class)
+from pub.student T
+where dname is not null
+group by dname, class
+order by dname, class
+
+
+学生没选课，导致相关记录丢失了
+
+
+4)
+create table test5_04
+    (dname varchar(30), 
+    class varchar(10), 
+    p_count1 int, 
+    p_count2 int, 
+    p_count int)
+
+//全体学生的选课记录，包括未选课的学生，已经去掉重复选课的记录
+create or replace view test5_04_0 as
+select sid, dname, class, cid, max(score) score, max(credit) credit
+from pub.student natural left outer join pub.student_course left outer join pub.course using(cid)
+where dname is not null
+group by sid, dname, class, cid
+
+//计算总学分，是一个整数或者null，一人一条数据
+create or replace view test5_04_1 as
+select sid, dname, class, 
+    (select sum(credit)
+    from test5_04_0
+    where T.sid = sid and T.dname = dname and T.class = T.class and score >= 60) sum_credit
+from test5_04_0 T
+group by sid, dname, class
+
+insert into test5_04
+select dname, class, 
+    ((select count(*)
+    from test5_04_1
+    where T.dname = dname and T.class = class and class <= 2008 and sum_credit >=8)
+    +
+    (select count(*)
+    from test5_04_1
+    where T.dname = dname and T.class = class and class > 2008 and sum_credit >=10)) p_count1, 
+    ((select count(*)
+    from test5_04_1
+    where T.dname = dname and T.class = class and class <= 2008 and (sum_credit < 8 or sum_credit is null))
+    +
+    (select count(*)
+    from test5_04_1
+    where T.dname = dname and T.class = class and class > 2008 and (sum_credit < 10 or sum_credit is null))) p_count2, 
+    (select count(*)
+    from test5_04_1
+    where T.dname = dname and T.class = class) p_count
+from test5_04_1 T
+group by dname, class
+
+
+//////确认一下没有不选ds和os的专业
+select dname
+from pub.student
+where dname not in
+    (select dname
+    from pub.student natural left outer join pub.student_course left outer join pub.course T using(cid)
+    where T.name = '数据结构')
+
+//每个院系（这个地方还包括了院系为null的数据），操作系统和数据结构的选课记录，已经去掉重复选课
+create or replace view test5_05_0 as
+select sid, dname, T.name name, max(score) score
+from pub.student natural left outer join pub.student_course left outer join pub.course T using(cid)
+where T.name = '数据结构' or T.name = '操作系统'
+group by sid, dname, T.name
+
+create table test5_05 as
+select dname, 
+    (select round(avg(score), 0)
+    from test5_05_0
+    where name = '数据结构' and dname = T.dname) avg_ds_score, 
+    (select round(avg(score), 0)
+    from test5_05_0
+    where name = '操作系统' and dname = T.dname) avg_os_score
+from test5_05_0 T
+where dname is not null //注意
+group by dname
+
+
+
+select cid, name
+from pub.course
+where name = '数据结构' or name = '操作系统'
+//得到（300005，操作系统） （300002，数据结构）
+
+create or replace view test5_06_0 as
+select sid, max(S.score) ds_score, max(T.score) os_score
+from pub.student_course T join pub.student_course S using(sid)
+where T.cid = 300005 and S.cid = 300002
+group by sid
+
+create table test5_06 as
+select sid, name, dname, ds_score, os_score
+from test5_06_0 natural join pub.student
+where dname = '计算机科学与技术学院'
+
+
+//找出选了ds的计算机的人，已经去掉重复选课
+create or replace view test5_07_0 as
+select sid, max(score) ds_score
+from pub.student_course
+where cid = '300002'
+group by sid
+//找出选了ds的计算机的人，已经去掉重复选课
+create or replace view test5_07_1 as
+select sid, max(score) os_score
+from pub.student_course
+where cid = '300005'
+group by sid
+
+//此处使用全外连接防止丢失数据
+create table test5_07 as
+select sid, name, dname, ds_score, os_score
+from test5_07_0 full outer join test5_07_1 using(sid) join pub.student using(sid)
+where dname = '计算机科学与技术学院'
+
+//稍微修改第七题的最后建表操作即可
+create table test5_08 as
+select sid, name, dname, ds_score, os_score
+from test5_07_0 full outer join test5_07_1 using(sid) right outer join pub.student using(sid)
+where dname = '计算机科学与技术学院'
